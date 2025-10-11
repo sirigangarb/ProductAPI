@@ -1,4 +1,6 @@
 import axios from 'axios';
+import sqlite3 from 'sqlite3';
+import { open } from 'sqlite';
 
 const EXTERNAL_URL = 'http://interview.surya-digital.in/get-electronics';
 const GET_BRAND_URL = 'http://interview.surya-digital.in/get-electronics-brands';
@@ -408,12 +410,99 @@ export const getProductsMerged = async (req, res) => {
   }
 };
 
+// Open database
+const openDB = async () => {
+  return open({
+    filename: './database.sqlite',
+    driver: sqlite3.Database,
+  });
+};
+// Step6 endpoint
+export const getProductsFromDB = async (req, res) => {
+  try {
+    const db = await openDB();
+    const { release_date_start, release_date_end, brands, page_size, page_number } = req.query;
 
-// ## Step 6: Use a SQLite Database
-export const useSQLiteDatabase = (req, res) => {
-    // Placeholder implementation
-    res.json({ message: 'Use SQLite database endpoint' });
-}
+    // Validate pagination
+    const size = parseInt(page_size, 10);
+    const page = parseInt(page_number, 10);
+    if (!page_size || !page_number || isNaN(size) || isNaN(page) || size <= 0 || page <= 0) {
+      return res.status(400).json({
+        error: 'Invalid pagination parameters. page_size and page_number must be positive integers starting from 1',
+      });
+    }
+
+    // Validate dates
+    const startDate = release_date_start ? parseDate(release_date_start) : null;
+    const endDate = release_date_end ? parseDate(release_date_end) : null;
+    if ((release_date_start && !startDate) || (release_date_end && !endDate)) {
+      return res.status(400).json({
+        error: 'Invalid date format. Use YYYY-MM-DD for release_date_start and release_date_end',
+      });
+    }
+
+    // Parse brands
+    let brandSet = null;
+    if (brands) {
+      brandSet = new Set(
+        brands.split(',').map((b) => b.trim()).filter((b) => b.length > 0)
+      );
+      if (brandSet.size === 0) brandSet = null;
+    }
+
+    // Build SQL query
+    let query = 'SELECT p.*, b.year_founded, b.street, b.city, b.state, b.postal_code, b.country FROM products p LEFT JOIN brands b ON p.brand_name = b.name WHERE 1=1';
+    const params = [];
+
+    if (startDate) {
+      query += ' AND date(p.release_date) >= date(?)';
+      params.push(release_date_start);
+    }
+    if (endDate) {
+      query += ' AND date(p.release_date) <= date(?)';
+      params.push(release_date_end);
+    }
+    if (brandSet) {
+      const placeholders = Array.from(brandSet).map(() => '?').join(',');
+      query += ` AND p.brand_name IN (${placeholders})`;
+      params.push(...Array.from(brandSet));
+    }
+
+    query += ' ORDER BY p.product_id'; // consistent ordering
+    query += ' LIMIT ? OFFSET ?';
+    params.push(size, (page - 1) * size);
+
+    const rows = await db.all(query, params);
+
+    // Map rows to response structure
+    const response = rows.map((r) => ({
+      product_id: r.product_id,
+      product_name: r.product_name,
+      brand: r.brand_name
+        ? {
+            name: r.brand_name,
+            year_founded: r.year_founded,
+            company_age: calculateCompanyAge(r.year_founded),
+            address: [r.street, r.city, r.state, r.postal_code, r.country].filter(Boolean).join(', '),
+          }
+        : null,
+      category_name: r.category_name,
+      description_text: r.description_text,
+      price: r.price,
+      currency: r.currency,
+      processor: r.processor,
+      memory: r.memory,
+      release_date: r.release_date,
+      average_rating: r.average_rating,
+      rating_count: r.rating_count,
+    }));
+
+    res.json(response);
+  } catch (err) {
+    console.error('Database error:', err.message || err);
+    return res.status(502).json({ error: 'Failed to fetch products from database' });
+  }
+};
 
 
 // ## Step 7: Implement CRUD APIs
