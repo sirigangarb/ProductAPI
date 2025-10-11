@@ -3,7 +3,7 @@ import morgan from 'morgan';
 import cors from 'cors';
 import { getAllProducts, 
             getProductsWithDateFilter,
-            addBrandFilters,
+            getProductsWithBrandFilter,
             addPagination,
             joinApiResponses,
             useSQLiteDatabase,
@@ -30,7 +30,7 @@ app.use(express.json({ limit: '1mb' }));
 
 app.get('/step1', getAllProducts);
 app.get('/step2', getProductsWithDateFilter);
-app.get('/step3', addBrandFilters);
+app.get('/step3', getProductsWithBrandFilter);
 app.get('/step4', addPagination);
 app.get('/step5', joinApiResponses);
 app.get('/step6', useSQLiteDatabase);
