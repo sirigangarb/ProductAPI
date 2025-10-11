@@ -639,11 +639,85 @@ export const deleteProduct = async (req, res) => {
   }
 };
 
-// ## Step 8: Return an Excel File
-export const returnExcelFile = (req, res) => {
-    // Placeholder implementation
-    res.json({ message: 'Return an Excel file endpoint' });
-}
+// Helper: flatten brand JSON for Excel
+const flattenBrand = (brand) => {
+  if (!brand) return {};
+  const addr = brand.address || {};
+  return {
+    brandName: brand.brandName ?? null,
+    owner: brand.owner ?? null,
+    'address.street': addr.street ?? null,
+    'address.city': addr.city ?? null,
+    'address.state': addr.state ?? null,
+    'address.postalCode': addr.postalCode ?? null,
+    'address.country': addr.country ?? null,
+    yearFounded: brand.yearFounded ?? null,
+  };
+};
+
+// Step 8 endpoint
+export const exportExcel = async (req, res) => {
+  try {
+    // Fetch electronics and brands from APIs
+    const [electronicsResp, brandsResp] = await Promise.all([
+      axios.get(ELECTRONICS_URL, { timeout: AXIOS_TIMEOUT }),
+      axios.get(BRANDS_URL, { timeout: AXIOS_TIMEOUT }),
+    ]);
+
+    let electronics = electronicsResp.data;
+    let brands = brandsResp.data;
+
+    if (!Array.isArray(electronics)) electronics = [electronics];
+    if (!Array.isArray(brands)) brands = [brands];
+
+    // Create workbook
+    const workbook = new ExcelJS.Workbook();
+
+    // --- Electronics Sheet ---
+    const electronicsSheet = workbook.addWorksheet('Electronics');
+
+    if (electronics.length > 0) {
+      // Columns from object keys
+      electronicsSheet.columns = Object.keys(electronics[0]).map((key) => ({
+        header: key,
+        key,
+        width: 20,
+      }));
+
+      // Add rows
+      electronics.forEach((item) => {
+        electronicsSheet.addRow(item);
+      });
+    }
+
+    // --- Brands Sheet ---
+    const brandsSheet = workbook.addWorksheet('Brands');
+
+    if (brands.length > 0) {
+      // Flatten all brands to get headers
+      const flattenedBrands = brands.map(flattenBrand);
+      const headers = Object.keys(flattenedBrands[0]);
+      brandsSheet.columns = headers.map((key) => ({ header: key, key, width: 20 }));
+
+      // Add rows
+      flattenedBrands.forEach((item) => brandsSheet.addRow(item));
+    }
+
+    // Set response headers
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename=products.xlsx');
+
+    // Write workbook to response
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('Excel export error:', err.message || err);
+    res.status(500).json({ error: 'Failed to export Excel file' });
+  }
+};
 
 // ## Step 9: Convert Images to Video
 export const convertImagesToVideo = (req, res) => {

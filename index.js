@@ -7,11 +7,11 @@ import { getAllProducts,
             getProductsWithPagination,
             getProductsMerged,
             getProductsFromDB,
-            returnExcelFile,
             convertImagesToVideo,
             createProduct,
             updateProduct,
-            deleteProduct
+            deleteProduct,
+            exportExcel
  } from './controller.js';
 
 
@@ -39,7 +39,7 @@ app.get('/step6', getProductsFromDB);
 app.get('/step7/create', createProduct);
 app.get('/step7/update/:product_id', updateProduct);
 app.get('/step7/delete/:product_id', deleteProduct);
-app.get('/step8', returnExcelFile);
+app.get('/step8', exportExcel);
 app.get('/step9', convertImagesToVideo);
 
 /* Minimal additional endpoints for convenience */
