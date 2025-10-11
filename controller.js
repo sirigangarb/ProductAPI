@@ -185,10 +185,91 @@ export const getProductsWithBrandFilter = async (req, res) => {
   }
 };
 
-// ## Step 4: Pagination
-export const addPagination = (req, res) => {
-    // Placeholder implementation
-    res.json({ message: 'Add pagination endpoint' });
+// Step 4 endpoint with pagination + date + brand filters
+export const getProductsWithPagination = async (req, res) => {
+  try {
+    const { release_date_start, release_date_end, brands, page_size, page_number } = req.query;
+
+    // Validate mandatory pagination parameters
+    const size = parseInt(page_size, 10);
+    const page = parseInt(page_number, 10);
+
+    if (!page_size || !page_number || isNaN(size) || isNaN(page) || size <= 0 || page <= 0) {
+      return res.status(400).json({
+        error: 'Invalid pagination parameters. page_size and page_number must be positive integers starting from 1',
+      });
+    }
+
+    // Validate dates
+    const startDate = release_date_start ? parseDate(release_date_start) : null;
+    const endDate = release_date_end ? parseDate(release_date_end) : null;
+
+    if ((release_date_start && !startDate) || (release_date_end && !endDate)) {
+      return res.status(400).json({
+        error: 'Invalid date format. Use YYYY-MM-DD for release_date_start and release_date_end',
+      });
+    }
+
+    // Parse brands
+    let brandSet = null;
+    if (brands) {
+      if (typeof brands !== 'string' || !brands.trim()) {
+        return res.status(400).json({
+          error: 'Invalid brands parameter. Provide comma-separated brand names',
+        });
+      }
+      brandSet = new Set(
+        brands.split(',').map((b) => b.trim()).filter((b) => b.length > 0)
+      );
+      if (brandSet.size === 0) brandSet = null;
+    }
+
+    // Fetch products from external API
+    const resp = await axios.get(EXTERNAL_URL, { timeout: AXIOS_TIMEOUT });
+    let payload = resp.data;
+
+    if (!Array.isArray(payload)) {
+      if (payload && typeof payload === 'object' && ('productId' in payload || 'productName' in payload)) {
+        payload = [payload];
+      } else {
+        return res.status(502).json({ error: 'External API returned unexpected format' });
+      }
+    }
+
+    // Filter valid products
+    let products = payload.filter(isValidProduct);
+
+    // Apply release date filters
+    if (startDate || endDate) {
+      products = products.filter((p) => {
+        if (!p.releaseDate) return false;
+        const pDate = parseDate(p.releaseDate);
+        if (!pDate) return false;
+
+        if (startDate && endDate) return pDate >= startDate && pDate <= endDate;
+        if (startDate) return pDate >= startDate;
+        if (endDate) return pDate <= endDate;
+        return true;
+      });
+    }
+
+    // Apply brand filters
+    if (brandSet) {
+      products = products.filter((p) => p.brandName && brandSet.has(p.brandName));
+    }
+
+    // Apply pagination
+    const startIndex = (page - 1) * size;
+    const paginatedProducts = products.slice(startIndex, startIndex + size);
+
+    // Map to required structure
+    const cleanedProducts = paginatedProducts.map(mapProduct);
+    return res.json(cleanedProducts);
+
+  } catch (err) {
+    console.error('Error fetching external electronics API:', err.message || err);
+    return res.status(502).json({ error: 'Failed to fetch electronics data from external provider' });
+  }
 };
 
 // ## Step 5: Joining the Response of Two APIs
