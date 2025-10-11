@@ -1,6 +1,9 @@
 import axios from 'axios';
 
 const EXTERNAL_URL = 'http://interview.surya-digital.in/get-electronics';
+const GET_BRAND_URL = 'http://interview.surya-digital.in/get-electronics-brands';
+const ELECTRONICS_URL = 'http://interview.surya-digital.in/get-electronics';
+const BRANDS_URL = 'http://interview.surya-digital.in/get-electronics-brands';
 const AXIOS_TIMEOUT = 8000; // ms
 
 // Validate product
@@ -272,11 +275,139 @@ export const getProductsWithPagination = async (req, res) => {
   }
 };
 
-// ## Step 5: Joining the Response of Two APIs
-export const joinApiResponses = (req, res) => {
-    // Placeholder implementation
-    res.json({ message: 'Join API responses endpoint' });
-}
+// Helper: calculate company age from year founded
+const calculateCompanyAge = (yearFounded) => {
+  if (!yearFounded || isNaN(Number(yearFounded))) return null;
+  const currentYear = new Date().getFullYear();
+  return currentYear - Number(yearFounded);
+};
+
+// Map a product + brand info to the required Step 5 structure
+const mapProductWithBrand = (product, brandInfo) => {
+  let brand = null;
+  if (brandInfo) {
+    const addr = brandInfo.address;
+    const addressStr = addr
+      ? [addr.street, addr.city, addr.state, addr.postalCode, addr.country].filter(Boolean).join(', ')
+      : null;
+    brand = {
+      name: brandInfo.brandName ?? null,
+      year_founded: brandInfo.yearFounded ?? null,
+      company_age: calculateCompanyAge(brandInfo.yearFounded),
+      address: addressStr,
+    };
+  }
+
+  return {
+    product_id: product.productId ?? null,
+    product_name: product.productName ?? null,
+    brand: brand,
+    category_name: product.category ?? null,
+    description_text: product.description ?? null,
+    price: product.price ?? null,
+    currency: product.currency ?? null,
+    processor: product.processor ?? null,
+    memory: product.memory ?? null,
+    release_date: product.releaseDate ?? null,
+    average_rating: product.averageRating ?? null,
+    rating_count: product.ratingCount ?? null,
+  };
+};
+
+// Step 5 endpoint
+export const getProductsMerged = async (req, res) => {
+  try {
+    const { release_date_start, release_date_end, brands, page_size, page_number } = req.query;
+
+    // Validate pagination
+    const size = parseInt(page_size, 10);
+    const page = parseInt(page_number, 10);
+    if (!page_size || !page_number || isNaN(size) || isNaN(page) || size <= 0 || page <= 0) {
+      return res.status(400).json({
+        error: 'Invalid pagination parameters. page_size and page_number must be positive integers starting from 1',
+      });
+    }
+
+    // Validate dates
+    const startDate = release_date_start ? parseDate(release_date_start) : null;
+    const endDate = release_date_end ? parseDate(release_date_end) : null;
+    if ((release_date_start && !startDate) || (release_date_end && !endDate)) {
+      return res.status(400).json({
+        error: 'Invalid date format. Use YYYY-MM-DD for release_date_start and release_date_end',
+      });
+    }
+
+    // Parse brands
+    let brandSet = null;
+    if (brands) {
+      if (typeof brands !== 'string' || !brands.trim()) {
+        return res.status(400).json({
+          error: 'Invalid brands parameter. Provide comma-separated brand names',
+        });
+      }
+      brandSet = new Set(
+        brands.split(',').map((b) => b.trim()).filter((b) => b.length > 0)
+      );
+      if (brandSet.size === 0) brandSet = null;
+    }
+
+    // Fetch both APIs in parallel
+    const [electronicsResp, brandsResp] = await Promise.all([
+      axios.get(ELECTRONICS_URL, { timeout: AXIOS_TIMEOUT }),
+      axios.get(BRANDS_URL, { timeout: AXIOS_TIMEOUT }),
+    ]);
+
+    let electronics = electronicsResp.data;
+    const brandsData = brandsResp.data;
+
+    // Ensure arrays
+    if (!Array.isArray(electronics)) electronics = [electronics];
+    if (!Array.isArray(brandsData)) return res.status(502).json({ error: 'Brands API returned unexpected format' });
+
+    // Filter valid products
+    let products = electronics.filter(isValidProduct);
+
+    // Apply release date filters
+    if (startDate || endDate) {
+      products = products.filter((p) => {
+        if (!p.releaseDate) return false;
+        const pDate = parseDate(p.releaseDate);
+        if (!pDate) return false;
+        if (startDate && endDate) return pDate >= startDate && pDate <= endDate;
+        if (startDate) return pDate >= startDate;
+        if (endDate) return pDate <= endDate;
+        return true;
+      });
+    }
+
+    // Apply brand filters
+    if (brandSet) {
+      products = products.filter((p) => p.brandName && brandSet.has(p.brandName));
+    }
+
+    // Pagination
+    const startIndex = (page - 1) * size;
+    const paginatedProducts = products.slice(startIndex, startIndex + size);
+
+    
+
+    // print brand info
+    console.log('Brand Info:', brandsData);
+
+    // Merge with brand info
+    const merged = paginatedProducts.map((product) => {
+      const brandInfo = brandsData.find((b) => b.brandName === product.brandName) ?? null;
+      return mapProductWithBrand(product, brandInfo);
+    });
+
+
+    return res.json(merged);
+  } catch (err) {
+    console.error('Error fetching or merging APIs:', err.message || err);
+    return res.status(502).json({ error: 'Failed to fetch or merge data from external APIs' });
+  }
+};
+
 
 // ## Step 6: Use a SQLite Database
 export const useSQLiteDatabase = (req, res) => {

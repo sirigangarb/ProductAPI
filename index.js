@@ -5,7 +5,7 @@ import { getAllProducts,
             getProductsWithDateFilter,
             getProductsWithBrandFilter,
             getProductsWithPagination,
-            joinApiResponses,
+            getProductsMerged,
             useSQLiteDatabase,
             implementCRUD,
             returnExcelFile,
@@ -32,7 +32,7 @@ app.get('/step1', getAllProducts);
 app.get('/step2', getProductsWithDateFilter);
 app.get('/step3', getProductsWithBrandFilter);
 app.get('/step4', getProductsWithPagination);
-app.get('/step5', joinApiResponses);
+app.get('/step5', getProductsMerged);
 app.get('/step6', useSQLiteDatabase);
 app.get('/step7', implementCRUD);
 app.get('/step8', returnExcelFile);
