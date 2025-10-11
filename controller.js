@@ -505,11 +505,138 @@ export const getProductsFromDB = async (req, res) => {
 };
 
 
-// ## Step 7: Implement CRUD APIs
-export const implementCRUD = (req, res) => {
-    // Placeholder implementation
-    res.json({ message: 'Implement CRUD APIs endpoint' });
-}
+// Helper: validate product input for create/update
+const validateProductInput = (data) => {
+  const errors = [];
+  if (!data.product_name) errors.push('product_name is required');
+  if (!data.brand || !data.brand.name) errors.push('brand.name is required');
+  if (!data.category_name) errors.push('category_name is required');
+  if (!data.price || isNaN(Number(data.price))) errors.push('price must be a number');
+  if (!data.currency) errors.push('currency is required');
+  if (!data.release_date || isNaN(new Date(data.release_date))) errors.push('release_date must be a valid date');
+  return errors;
+};
+
+// POST /step7/create
+export const createProduct = async (req, res) => {
+  try {
+    const db = await openDB();
+    const data = req.body;
+
+    const errors = validateProductInput(data);
+    if (errors.length) return res.status(400).json({ errors });
+
+    // Insert brand if not exists
+    const brand = data.brand;
+    await db.run(
+      `INSERT OR IGNORE INTO brands (name, year_founded, street, city, state, postal_code, country) 
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        brand.name,
+        brand.year_founded || null,
+        ...(brand.address ? brand.address.split(',').map(s => s.trim()) : [null, null, null, null, null])
+      ]
+    );
+
+    // Insert product
+    const result = await db.run(
+      `INSERT INTO products 
+       (product_name, brand_name, category_name, description_text, price, currency, processor, memory, release_date, average_rating, rating_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        data.product_name,
+        brand.name,
+        data.category_name,
+        data.description_text || null,
+        data.price,
+        data.currency,
+        data.processor || null,
+        data.memory || null,
+        data.release_date,
+        data.average_rating || null,
+        data.rating_count || null
+      ]
+    );
+
+    const newProduct = await db.get('SELECT * FROM products WHERE product_id = ?', [result.lastID]);
+
+    res.status(201).json({ message: 'Product created', product_id: newProduct.product_id });
+  } catch (err) {
+    console.error('DB Create Error:', err);
+    res.status(500).json({ error: 'Failed to create product' });
+  }
+};
+
+// PUT /step7/update/:product_id
+export const updateProduct = async (req, res) => {
+  try {
+    const db = await openDB();
+    const { product_id } = req.params;
+    const data = req.body;
+
+    const existing = await db.get('SELECT * FROM products WHERE product_id = ?', [product_id]);
+    if (!existing) return res.status(404).json({ error: 'Product not found' });
+
+    const errors = validateProductInput(data);
+    if (errors.length) return res.status(400).json({ errors });
+
+    const brand = data.brand;
+    // Update or insert brand
+    await db.run(
+      `INSERT OR IGNORE INTO brands (name, year_founded, street, city, state, postal_code, country) 
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        brand.name,
+        brand.year_founded || null,
+        ...(brand.address ? brand.address.split(',').map(s => s.trim()) : [null, null, null, null, null])
+      ]
+    );
+
+    // Update product
+    await db.run(
+      `UPDATE products SET
+       product_name = ?, brand_name = ?, category_name = ?, description_text = ?, price = ?, currency = ?, processor = ?, memory = ?, release_date = ?, average_rating = ?, rating_count = ?
+       WHERE product_id = ?`,
+      [
+        data.product_name,
+        brand.name,
+        data.category_name,
+        data.description_text || null,
+        data.price,
+        data.currency,
+        data.processor || null,
+        data.memory || null,
+        data.release_date,
+        data.average_rating || null,
+        data.rating_count || null,
+        product_id
+      ]
+    );
+
+    res.status(200).json({ message: 'Product updated', product_id });
+  } catch (err) {
+    console.error('DB Update Error:', err);
+    res.status(500).json({ error: 'Failed to update product' });
+  }
+};
+
+// DELETE /step7/delete/:product_id
+export const deleteProduct = async (req, res) => {
+  try {
+    const db = await openDB();
+    const { product_id } = req.params;
+
+    const existing = await db.get('SELECT * FROM products WHERE product_id = ?', [product_id]);
+    if (!existing) return res.status(404).json({ error: 'Product not found' });
+
+    await db.run('DELETE FROM products WHERE product_id = ?', [product_id]);
+
+    res.status(204).send();
+  } catch (err) {
+    console.error('DB Delete Error:', err);
+    res.status(500).json({ error: 'Failed to delete product' });
+  }
+};
 
 // ## Step 8: Return an Excel File
 export const returnExcelFile = (req, res) => {

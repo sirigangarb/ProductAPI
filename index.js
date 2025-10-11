@@ -7,9 +7,11 @@ import { getAllProducts,
             getProductsWithPagination,
             getProductsMerged,
             getProductsFromDB,
-            implementCRUD,
             returnExcelFile,
-            convertImagesToVideo
+            convertImagesToVideo,
+            createProduct,
+            updateProduct,
+            deleteProduct
  } from './controller.js';
 
 
@@ -34,7 +36,9 @@ app.get('/step3', getProductsWithBrandFilter);
 app.get('/step4', getProductsWithPagination);
 app.get('/step5', getProductsMerged);
 app.get('/step6', getProductsFromDB);
-app.get('/step7', implementCRUD);
+app.get('/step7/create', createProduct);
+app.get('/step7/update', updateProduct);
+app.get('/step7/delete', deleteProduct);
 app.get('/step8', returnExcelFile);
 app.get('/step9', convertImagesToVideo);
 
