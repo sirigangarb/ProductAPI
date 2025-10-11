@@ -37,8 +37,8 @@ app.get('/step4', getProductsWithPagination);
 app.get('/step5', getProductsMerged);
 app.get('/step6', getProductsFromDB);
 app.get('/step7/create', createProduct);
-app.get('/step7/update', updateProduct);
-app.get('/step7/delete', deleteProduct);
+app.get('/step7/update/:product_id', updateProduct);
+app.get('/step7/delete/:product_id', deleteProduct);
 app.get('/step8', returnExcelFile);
 app.get('/step9', convertImagesToVideo);
 
