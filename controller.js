@@ -3,7 +3,7 @@ import axios from 'axios';
 const EXTERNAL_URL = 'http://interview.surya-digital.in/get-electronics';
 const AXIOS_TIMEOUT = 8000; // ms
 
-// Helper: check if a product is valid
+// Validate product
 const isValidProduct = (item) => {
   if (!item || typeof item !== 'object') return false;
   if (!('productId' in item) || item.productId === undefined || item.productId === null) return false;
@@ -12,7 +12,7 @@ const isValidProduct = (item) => {
   return true;
 };
 
-// Map raw product to required shape
+// Map product to required shape
 const mapProduct = (item) => ({
   product_id: item.productId ?? null,
   product_name: item.productName ?? null,
@@ -28,14 +28,20 @@ const mapProduct = (item) => ({
   rating_count: item.ratingCount ?? null,
 });
 
+// Helper: parse date string, return Date object or null if invalid
+const parseDate = (str) => {
+  if (!str) return null;
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+// Step 1 endpoint
 export const getAllProducts = async (req, res) => {
   try {
     const resp = await axios.get(EXTERNAL_URL, { timeout: AXIOS_TIMEOUT });
     let payload = resp.data;
 
-    // Ensure payload is an array
     if (!Array.isArray(payload)) {
-      // Handle single object case
       if (payload && typeof payload === 'object' && ('productId' in payload || 'productName' in payload)) {
         payload = [payload];
       } else {
@@ -44,22 +50,66 @@ export const getAllProducts = async (req, res) => {
     }
 
     const cleanedProducts = payload.filter(isValidProduct).map(mapProduct);
-
     return res.json(cleanedProducts);
   } catch (err) {
     console.error('Error fetching external electronics API:', err.message || err);
-    return res.status(502).json({
-      error: 'Failed to fetch electronics data from external provider',
-    });
+    return res.status(502).json({ error: 'Failed to fetch electronics data from external provider' });
   }
 };
 
+// Step 2 endpoint with release date filters
+export const getProductsWithDateFilter = async (req, res) => {
+  try {
+    const { release_date_start, release_date_end } = req.query;
 
-// addReleaseDateFilters
-export const addReleaseDateFilters = (req, res) => {
-    // Placeholder implementation
-    res.json({ message: 'Add release date filters endpoint' });
+    // Validate date formats
+    const startDate = release_date_start ? parseDate(release_date_start) : null;
+    const endDate = release_date_end ? parseDate(release_date_end) : null;
+
+    if ((release_date_start && !startDate) || (release_date_end && !endDate)) {
+      return res.status(400).json({
+        error: 'Invalid date format. Use YYYY-MM-DD format for release_date_start and release_date_end',
+      });
+    }
+
+    // Fetch all products from external API
+    const resp = await axios.get(EXTERNAL_URL, { timeout: AXIOS_TIMEOUT });
+    let payload = resp.data;
+
+    if (!Array.isArray(payload)) {
+      if (payload && typeof payload === 'object' && ('productId' in payload || 'productName' in payload)) {
+        payload = [payload];
+      } else {
+        return res.status(502).json({ error: 'External API returned unexpected format' });
+      }
+    }
+
+    // Filter valid products
+    let products = payload.filter(isValidProduct);
+
+    // Apply release date filters if provided
+    if (startDate || endDate) {
+      products = products.filter((p) => {
+        if (!p.releaseDate) return false; // skip products without releaseDate
+        const pDate = parseDate(p.releaseDate);
+        if (!pDate) return false;
+
+        if (startDate && endDate) return pDate >= startDate && pDate <= endDate;
+        if (startDate) return pDate >= startDate;
+        if (endDate) return pDate <= endDate;
+        return true;
+      });
+    }
+
+    // Map to required structure
+    const cleanedProducts = products.map(mapProduct);
+    return res.json(cleanedProducts);
+  } catch (err) {
+    console.error('Error fetching external electronics API:', err.message || err);
+    return res.status(502).json({ error: 'Failed to fetch electronics data from external provider' });
+  }
 };
+
 
 // ## Step 3: Add Brand Filters
 export const addBrandFilters = (req, res) => {

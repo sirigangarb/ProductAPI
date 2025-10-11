@@ -2,7 +2,7 @@ import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
 import { getAllProducts, 
-            addReleaseDateFilters,
+            getProductsWithDateFilter,
             addBrandFilters,
             addPagination,
             joinApiResponses,
@@ -28,8 +28,8 @@ app.use(express.json({ limit: '1mb' }));
 // - All values for the keys in the JSON structure above have to be in the same structure as you receive them from the API. For example the release date field in the response of the get electronics API you call is returned in the format "2024-08-07". 
 // In your API's response please return the date in the same format.
 
-app.get('/', getAllProducts);
-app.get('/step2', addReleaseDateFilters);
+app.get('/step1', getAllProducts);
+app.get('/step2', getProductsWithDateFilter);
 app.get('/step3', addBrandFilters);
 app.get('/step4', addPagination);
 app.get('/step5', joinApiResponses);
